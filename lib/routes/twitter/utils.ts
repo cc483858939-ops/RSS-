@@ -477,6 +477,7 @@ const ProcessFeed = (ctx, { data = [] }: { data?: any[] }, params: ProcessFeedPa
 const parseRouteParams = (routeParams) => {
     let count, include_replies, include_rts, only_media;
     let force_web_api = false;
+    let strict = false;
     switch (routeParams) {
         case 'exclude_rts_replies':
         case 'exclude_replies_rts':
@@ -504,9 +505,10 @@ const parseRouteParams = (routeParams) => {
             include_rts = fallback(undefined, queryToBoolean(parsed.get('includeRts')), true);
             force_web_api = fallback(undefined, queryToBoolean(parsed.get('forceWebApi')), false);
             only_media = fallback(undefined, queryToBoolean(parsed.get('onlyMedia')), false);
+            strict = fallback(undefined, queryToBoolean(parsed.get('strict')), false);
         }
     }
-    return { count, include_replies, include_rts, force_web_api, only_media };
+    return { count, include_replies, include_rts, force_web_api, only_media, strict };
 };
 
 export const excludeRetweet = function (tweets) {

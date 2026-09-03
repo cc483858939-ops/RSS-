@@ -5,8 +5,7 @@ import ofetch from '@/utils/ofetch';
 
 import { getTwitterUserCacheKey } from '../../utils';
 import { baseUrl, gqlFeatures, gqlMap, initGqlMap } from './constants';
-import type { ApiParams } from './utils';
-import { gatherLegacyFromData, paginationTweets, twitterGot } from './utils';
+import { type ApiParams, fetchTimelinePage, gatherLegacyFromData, paginationTweets, type TimelinePage, twitterGot } from './utils';
 
 const getUserData = (id) =>
     cache.tryGet(`twitter-userdata-${id}`, () => {
@@ -53,19 +52,74 @@ const cacheTryGet = async (_id, params, operationName, func) => {
     return cache.tryGet(getTwitterUserCacheKey(id, operationName, params), () => func(id, params), config.cache.routeExpire, false);
 };
 
-const getUserTweets = (id: string, params?: ApiParams) =>
-    cacheTryGet(id, params, 'getUserTweets', async (id, params = {}) =>
-        gatherLegacyFromData(
-            await paginationTweets('UserTweets', id, {
-                ...params,
-                count: 20,
-                includePromotedContent: true,
-                withQuickPromoteEligibilityTweetFields: true,
-                withVoice: true,
-                withV2Timeline: true,
-            })
-        )
-    );
+const USER_TIMELINE_PAGE_SIZE = 20;
+const USER_TIMELINE_MAX_PAGES = 3;
+const USER_TIMELINE_MAX_ITEMS = 60;
+
+export type TimelinePageFetcher = (variables: ApiParams) => Promise<TimelinePage>;
+
+const normalizeUserTimelineCount = (count: ApiParams['count']) => {
+    const numericCount = Number(count);
+    if (count === undefined || !Number.isFinite(numericCount)) {
+        return USER_TIMELINE_PAGE_SIZE;
+    }
+    return Math.min(USER_TIMELINE_MAX_ITEMS, Math.max(1, Math.trunc(numericCount)));
+};
+
+export const getBoundedUserTweets = async (id: string | number, params: ApiParams = {}, fetchPage: TimelinePageFetcher = (variables) => fetchTimelinePage('UserTweets', id, variables)) => {
+    const requestedCount = normalizeUserTimelineCount(params.count);
+    const baseVariables = { ...params } as ApiParams & { cursor?: string };
+    delete baseVariables.cursor;
+    Object.assign(baseVariables, {
+        count: USER_TIMELINE_PAGE_SIZE,
+        includePromotedContent: true,
+        withQuickPromoteEligibilityTweetFields: true,
+        withVoice: true,
+        withV2Timeline: true,
+    });
+
+    const tweets: any[] = [];
+    const seenTweetIds = new Set<string>();
+    const seenCursors = new Set<string>();
+    const maxPages = Math.min(USER_TIMELINE_MAX_PAGES, Math.ceil(requestedCount / USER_TIMELINE_PAGE_SIZE));
+    let cursor: string | undefined;
+
+    for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
+        const variables = cursor ? { ...baseVariables, cursor } : { ...baseVariables };
+        // Cursor requests must remain sequential because each cursor comes from the previous page.
+        // eslint-disable-next-line no-await-in-loop
+        const page = await fetchPage(variables);
+        const pageTweets = gatherLegacyFromData(page.entries || []);
+        let newTweetEntries = 0;
+
+        for (const tweet of pageTweets) {
+            const tweetId = typeof tweet?.id_str === 'string' && tweet.id_str.trim() ? tweet.id_str : undefined;
+            if (tweetId) {
+                if (seenTweetIds.has(tweetId)) {
+                    continue;
+                }
+                seenTweetIds.add(tweetId);
+            }
+            tweets.push(tweet);
+            newTweetEntries++;
+        }
+
+        if (tweets.length >= requestedCount || newTweetEntries === 0) {
+            break;
+        }
+
+        const nextCursor = page.nextCursor;
+        if (!nextCursor || seenCursors.has(nextCursor)) {
+            break;
+        }
+        seenCursors.add(nextCursor);
+        cursor = nextCursor;
+    }
+
+    return tweets.slice(0, requestedCount);
+};
+
+const getUserTweets = (id: string, params?: ApiParams) => cacheTryGet(id, params, 'getUserTweets', (id, params = {}) => getBoundedUserTweets(id, params));
 
 const getUserTweetsAndReplies = (id: string, params?: ApiParams) =>
     cacheTryGet(id, params, 'getUserTweetsAndReplies', async (id, params = {}) =>

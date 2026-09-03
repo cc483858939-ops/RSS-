@@ -68,7 +68,7 @@ async function handler(ctx) {
     const id = ctx.req.param('id');
 
     // For compatibility
-    const { count, include_replies, include_rts } = utils.parseRouteParams(ctx.req.param('routeParams'));
+    const { count, include_replies, include_rts, strict } = utils.parseRouteParams(ctx.req.param('routeParams'));
     const params = count ? { count } : {};
 
     await api.init();
@@ -80,7 +80,16 @@ async function handler(ctx) {
             data = utils.excludeRetweet(data);
         }
     } catch (error) {
-        logger.error(error);
+        logger.error('Twitter user timeline fetch failed');
+        if (strict) {
+            throw error;
+        }
+    }
+
+    if (strict && (!data || data.length === 0)) {
+        const error = new Error('Strict Twitter user timeline returned no items');
+        logger.error(error.message);
+        throw error;
     }
 
     const profileImageUrl = userInfo?.profile_image_url || userInfo?.profile_image_url_https;

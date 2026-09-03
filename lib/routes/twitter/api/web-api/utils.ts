@@ -243,7 +243,61 @@ export const twitterGot = async (
     return responseData;
 };
 
-export const paginationTweets = async (endpoint: string, userId: number | undefined, variables: ApiParams, path?: string[]) => {
+export interface TimelinePage {
+    entries: any[];
+    nextCursor?: string;
+}
+
+const getInstructionType = (instruction: any) => instruction?.type || instruction?.__typename;
+
+const getTimelineInstructionEntries = (instructions: any[]) => {
+    const entries: any[] = [];
+    for (const instruction of instructions) {
+        const type = getInstructionType(instruction);
+        if (type === 'TimelineAddEntries') {
+            entries.push(...(Array.isArray(instruction.entries) ? instruction.entries : []));
+        } else if (type === 'TimelineReplaceEntry') {
+            const replacement = instruction.entry ?? instruction.replacement ?? instruction;
+            if (Array.isArray(replacement)) {
+                entries.push(...replacement);
+            } else if (replacement) {
+                entries.push(replacement);
+            }
+            if (replacement !== instruction) {
+                entries.push(instruction);
+            }
+        }
+    }
+    return entries;
+};
+
+const getCursorContent = (entry: any) => entry?.content || entry?.item || entry?.entry?.content || entry;
+
+const getCursorValue = (entry: any) => {
+    const value = getCursorContent(entry)?.value;
+    return typeof value === 'string' && value.trim() ? value : undefined;
+};
+
+export const extractBottomCursor = (instructions: any[]) => {
+    let structuralFallback: string | undefined;
+    for (const entry of getTimelineInstructionEntries(instructions)) {
+        const value = getCursorValue(entry);
+        if (!value) {
+            continue;
+        }
+
+        const content = getCursorContent(entry);
+        if (content?.cursorType === 'Bottom') {
+            return value;
+        }
+        if (!structuralFallback && typeof entry?.entryId === 'string' && entry.entryId.startsWith('cursor-bottom-')) {
+            structuralFallback = value;
+        }
+    }
+    return structuralFallback;
+};
+
+export const fetchTimelinePage = async (endpoint: string, userId: number | string | undefined, variables: ApiParams, path?: string[]): Promise<TimelinePage> => {
     const params = {
         variables: JSON.stringify({ ...variables, userId }),
         features: JSON.stringify(gqlFeatures[endpoint]),
@@ -268,9 +322,9 @@ export const paginationTweets = async (endpoint: string, userId: number | undefi
         if (path) {
             let instructions = data;
             for (const p of path) {
-                instructions = instructions[p];
+                instructions = instructions?.[p];
             }
-            return instructions.instructions;
+            return instructions?.instructions;
         }
 
         const userResult = data?.user?.result;
@@ -284,16 +338,21 @@ export const paginationTweets = async (endpoint: string, userId: number | undefi
 
     const data = await fetchData();
     const instructions = getInstructions(data);
-    if (!instructions) {
-        return [];
+    if (!Array.isArray(instructions)) {
+        return { entries: [] };
     }
 
-    const moduleItems = instructions.find((i) => i.type === 'TimelineAddToModule')?.moduleItems;
-    const entries = instructions.find((i) => i.type === 'TimelineAddEntries')?.entries;
-    const gridEntries = entries.find((i) => i.entryId === 'profile-grid-0')?.content?.items;
+    const moduleItems = instructions.find((i) => getInstructionType(i) === 'TimelineAddToModule')?.moduleItems;
+    const entries = instructions.find((i) => getInstructionType(i) === 'TimelineAddEntries')?.entries;
+    const gridEntries = entries?.find((i) => i.entryId === 'profile-grid-0')?.content?.items;
 
-    return gridEntries || moduleItems || entries || [];
+    return {
+        entries: gridEntries || moduleItems || entries || [],
+        nextCursor: extractBottomCursor(instructions),
+    };
 };
+
+export const paginationTweets = async (endpoint: string, userId: number | string | undefined, variables: ApiParams, path?: string[]) => (await fetchTimelinePage(endpoint, userId, variables, path)).entries;
 
 const hydrateLegacyUser = (legacy: any, tweet: any) => {
     const userResult = tweet.core?.user_results?.result;
