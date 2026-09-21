@@ -28,6 +28,7 @@ describe('Twitter user route strict mode', () => {
             name: 'Fixture User',
             screen_name: 'fixture-user',
             profile_image_url: 'https://fixture.test/avatar.jpg',
+            profile_banner_url: 'https://pbs.twimg.com/profile_banners/7/123',
         });
     });
 
@@ -48,5 +49,30 @@ describe('Twitter user route strict mode', () => {
         api.getUserTweets.mockRejectedValue(new Error('fixture timeline failure'));
 
         await expect(route.handler(contextFor('exclude_rts_replies'))).resolves.toMatchObject({ allowEmpty: true });
+    });
+
+    it('exposes the X profile banner as channel metadata', async () => {
+        api.getUserTweets.mockResolvedValue([]);
+
+        const result = await route.handler(contextFor());
+
+        expect(result).toMatchObject({
+            image: 'https://fixture.test/avatar.jpg',
+            profileBannerUrl: 'https://pbs.twimg.com/profile_banners/7/123',
+        });
+    });
+
+    it('keeps the profile banner property when the account has no banner', async () => {
+        api.getUser.mockResolvedValue({
+            name: 'Fixture User',
+            screen_name: 'fixture-user',
+            profile_image_url: 'https://fixture.test/avatar.jpg',
+            profile_banner_url: '',
+        });
+        api.getUserTweets.mockResolvedValue([]);
+
+        const result = await route.handler(contextFor());
+
+        expect(result).toHaveProperty('profileBannerUrl', '');
     });
 });

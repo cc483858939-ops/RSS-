@@ -217,20 +217,39 @@ const getList = async (id: string, params?: ApiParams) =>
         ['listConversation-']
     );
 
+export const getProfileBannerUrl = (result: any): string => {
+    const candidates = [result?.profile_banner_url, result?.legacy?.profile_banner_url, result?.profile_banner?.url, result?.profile_banner?.image_url];
+
+    for (const candidate of candidates) {
+        if (typeof candidate !== 'string') {
+            continue;
+        }
+
+        const value = candidate.trim();
+        if (value) {
+            return value;
+        }
+    }
+
+    return '';
+};
+
 const getUser = async (id: string) => {
     const userData: any = await getUserData(id);
+    const result = userData.data?.user?.result;
 
-    if (!userData.data.user) {
+    if (!userData.data?.user) {
         throw new InvalidParameterError("This account doesn't exist");
     }
-    if (userData.data.user.result.__typename === 'UserUnavailable') {
-        throw new InvalidParameterError(userData.data.user.result.message || 'User is unavailable');
+    if (result?.__typename === 'UserUnavailable') {
+        throw new InvalidParameterError(result.message || 'User is unavailable');
     }
 
     return {
-        profile_image_url: userData.data?.user?.result?.avatar?.image_url,
-        description: userData.data?.user?.result?.profile_bio?.description,
-        ...userData.data?.user?.result?.core,
+        ...result?.core,
+        profile_image_url: result?.avatar?.image_url,
+        profile_banner_url: getProfileBannerUrl(result),
+        description: result?.profile_bio?.description,
     };
 };
 

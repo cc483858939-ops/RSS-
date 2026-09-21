@@ -64,4 +64,32 @@ describe('RSS view', () => {
         expect(html).toContain('<category>Podcast</category>');
         expect(html).toContain('<category>News</category>');
     });
+
+    it('renders NexusFeed profile banner metadata when the channel opts in', () => {
+        const html = renderToString(
+            <RSS
+                data={{
+                    title: 'Fixture',
+                    profileBannerUrl: 'https://pbs.twimg.com/profile_banners/7/123',
+                }}
+            />
+        );
+
+        expect(html).toContain('xmlns:nexusfeed="urn:nexusfeed:rss:1.0"');
+        expect(html).toContain('<nexusfeed:profileBanner>https://pbs.twimg.com/profile_banners/7/123</nexusfeed:profileBanner>');
+    });
+
+    it('renders an empty profile banner element when the channel has no banner', () => {
+        const html = renderToString(<RSS data={{ title: 'Fixture', profileBannerUrl: '' }} />);
+
+        expect(html).toContain('xmlns:nexusfeed="urn:nexusfeed:rss:1.0"');
+        expect(html).toContain('<nexusfeed:profileBanner></nexusfeed:profileBanner>');
+    });
+
+    it('does not add NexusFeed metadata to unrelated channels', () => {
+        const html = renderToString(<RSS data={{ title: 'Fixture' }} />);
+
+        expect(html).not.toContain('xmlns:nexusfeed=');
+        expect(html).not.toContain('nexusfeed:profileBanner');
+    });
 });

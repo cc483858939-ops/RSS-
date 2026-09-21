@@ -98,6 +98,7 @@ async function handler(ctx) {
         title: `Twitter @${userInfo?.name}`,
         link: `https://x.com/${userInfo?.screen_name}`,
         image: profileImageUrl.replace(/_normal.jpg$/, '.jpg'),
+        profileBannerUrl: typeof userInfo?.profile_banner_url === 'string' ? userInfo.profile_banner_url.trim() : '',
         description: userInfo?.description,
         item:
             data &&

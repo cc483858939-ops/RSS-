@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getBoundedUserTweets, type TimelinePageFetcher } from '../../lib/routes/twitter/api/web-api/api';
+import { getBoundedUserTweets, getProfileBannerUrl, type TimelinePageFetcher } from '../../lib/routes/twitter/api/web-api/api';
 import type { ApiParams, TimelinePage } from '../../lib/routes/twitter/api/web-api/utils';
 
 const tweetEntry = (id: string) => ({
@@ -155,5 +155,24 @@ describe('bounded UserTweets pagination', () => {
 
         await expect(getBoundedUserTweets('42', { count: 40 }, fetchPage)).rejects.toThrow('fixture page failure');
         expect(calls).toBe(2);
+    });
+});
+
+describe('X profile banner extraction', () => {
+    it('extracts the modern direct shape', () => {
+        expect(getProfileBannerUrl({ profile_banner_url: 'https://pbs.twimg.com/profile_banners/1/100' })).toBe('https://pbs.twimg.com/profile_banners/1/100');
+    });
+
+    it('extracts the legacy shape', () => {
+        expect(getProfileBannerUrl({ legacy: { profile_banner_url: 'https://pbs.twimg.com/profile_banners/1/200' } })).toBe('https://pbs.twimg.com/profile_banners/1/200');
+    });
+
+    it('returns an empty string when the banner is missing', () => {
+        expect(getProfileBannerUrl({})).toBe('');
+        expect(getProfileBannerUrl(null)).toBe('');
+    });
+
+    it('trims banner URLs', () => {
+        expect(getProfileBannerUrl({ profile_banner_url: '  https://pbs.twimg.com/profile_banners/1/300  ' })).toBe('https://pbs.twimg.com/profile_banners/1/300');
     });
 });

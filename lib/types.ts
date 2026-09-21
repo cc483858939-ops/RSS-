@@ -89,6 +89,7 @@ export type Data = {
     item?: DataItem[];
     allowEmpty?: boolean;
     image?: string;
+    profileBannerUrl?: string | null;
     author?: string;
     language?: Language;
     feedLink?: string;
